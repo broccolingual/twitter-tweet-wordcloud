@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from matplotlib.font_manager import FontProperties
 fp = FontProperties(fname=r'C:\WINDOWS\Fonts\meiryo.ttc', size=50) #日本語対応
 
-def DrawWordCloud(word_freq_dict, user_name="unknown", show=True):
+def DrawWordCloud(word_freq_dict, title="unknown", show=True):
     # デフォルト設定を変更して、colormapを"rainbow"に変更
     wordcloud = WordCloud(background_color='white', min_font_size=15, font_path='C:\WINDOWS\Fonts\meiryo.ttc',
                           max_font_size=200, width=1000, height=500, prefer_horizontal=1.0, relative_scaling=0.0, colormap="rainbow")    
@@ -12,7 +12,7 @@ def DrawWordCloud(word_freq_dict, user_name="unknown", show=True):
     plt.figure(figsize=[15,10])
     plt.imshow(wordcloud, interpolation='bilinear')
     plt.axis("off")
-    plt.savefig(f"./output/{user_name}.png")
+    plt.savefig(f"./output/wordcloud/{title}.png")
     if show is True:
         plt.show()
 
