@@ -10,6 +10,8 @@ janome = "*"
 matplotlib = "*"
 wordcloud = "*"
 tqdm = "*"
+numpy = "*"
+aiohttp = "*"
 
 [dev-packages]
 

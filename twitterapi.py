@@ -1,13 +1,17 @@
+import asyncio
 import json
 import os
 import math
 import random
 import string
-import tqdm
+import time
 import urllib.request
+from urllib.parse import urlparse
 
+import aiohttp
 from dotenv import find_dotenv, load_dotenv
 from requests_oauthlib import OAuth1Session
+import tqdm
 
 from utils import removeSameImage
 
@@ -26,11 +30,12 @@ URL_USER_TIMELINE = "https://api.twitter.com/1.1/statuses/user_timeline.json"
 URL_KEYWORD_TIMELINE = "https://api.twitter.com/1.1/search/tweets.json"
 
 
-def getAccountTwitterData(user_name, repeat=3, media_dl=False):
+def getAccountTwitterData(user_name, repeat=20, media_dl=False):
     params = {'screen_name': user_name, 'exclude_replies': True,
               'include_rts': False, 'count': 200}  # 取得パラメータ
     tweets = []
-    media_urls = set()
+    image_urls = set()
+    video_urls = set()
 
     mid = -1
 
@@ -51,7 +56,12 @@ def getAccountTwitterData(user_name, repeat=3, media_dl=False):
                 try:
                     media_list = tweet["extended_entities"]["media"]
                     for media in media_list:
-                        media_urls.add(media["media_url"])
+                        image_urls.add(media["media_url"])
+
+                        video_info = media["video_info"]["variants"]
+                        info = sorted(
+                            video_info, key=lambda x: "bitrate" in x and -x["bitrate"])
+                        video_urls.add(info[0]["url"])
                 except KeyError:
                     pass
 
@@ -67,18 +77,25 @@ def getAccountTwitterData(user_name, repeat=3, media_dl=False):
             break
 
     if media_dl:
-        downloadAllImage(media_urls, keyword=user_name)
+        downloadAllImage(image_urls, keyword=user_name)
         removeSameImage(f"./output/img/{user_name}")
+
+        a_s = time.time()
+        asyncDownloadAllVideo(video_urls, keyword=user_name)
+        e_s = time.time() - a_s
+
+        print(f"\nAsync Download : {e_s}s")
 
     print("Number of tweets acquired：%s" % len(tweets))
     return tweets
 
 
-def getKeywordTwitterData(keyword, repeat=3, media_dl=False):
+def getKeywordTwitterData(keyword, repeat=20, media_dl=False):
     params = {'q': keyword.replace(
         "_", " "), 'count': 200, 'result_type': 'mixed'}  # 取得パラメータ
     tweets = []
-    media_urls = set()
+    image_urls = set()
+    video_urls = set()
 
     mid = -1
 
@@ -99,7 +116,12 @@ def getKeywordTwitterData(keyword, repeat=3, media_dl=False):
                 try:
                     media_list = tweet["extended_entities"]["media"]
                     for media in media_list:
-                        media_urls.add(media["media_url"])
+                        image_urls.add(media["media_url"])
+
+                        video_info = media["video_info"]["variants"]
+                        info = sorted(
+                            video_info, key=lambda x: "bitrate" in x and -x["bitrate"])
+                        video_urls.add(info[0]["url"])
                 except KeyError:
                     pass
 
@@ -115,23 +137,85 @@ def getKeywordTwitterData(keyword, repeat=3, media_dl=False):
             break
 
     if media_dl:
-        downloadAllImage(media_urls, keyword=keyword)
+        downloadAllImage(image_urls, keyword=keyword)
         removeSameImage(f"./output/img/{keyword}")
+
+        downloadAllVideo(video_urls, keyword=keyword)
 
     print("\nNumber of tweets acquired：%s" % len(tweets))
     return tweets
 
 
 def downloadAllImage(url_list, keyword="unknown"):
-    print("\nDownload Progress: ")
+    print("\nDownload Progress(Image): ")
     for url in tqdm.tqdm(url_list):
-        downloadFromURL(url, keyword=keyword)
+        downloadImageFromURL(url, keyword=keyword)
 
 
-def downloadFromURL(url, keyword="unknown"):
+def downloadAllVideo(url_list, keyword="unknown"):
+    print("\nDownload Progress(Video): ")
+    for url in tqdm.tqdm(url_list):
+        downloadVideoFromURL(url, keyword=keyword)
+
+
+def asyncDownloadAllImage(url_list, keyword="unknown"):
+    pass
+
+
+def asyncDownloadAllVideo(url_list, keyword="unknown"):
+    # for windows
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+    loop = asyncio.get_event_loop()
+    to_do = [asyncDownloadVideoFromURL(
+        url, keyword=keyword) for url in url_list]
+    wait_coro = asyncio.wait(to_do)
+    r, _ = loop.run_until_complete(wait_coro)
+    loop.close()
+
+
+async def asyncDownloadImageFromURL(url, keyword="unknown"):
+    pass
+
+
+async def asyncDownloadVideoFromURL(url, keyword="unknown"):
+    path = urlparse(url).path
+    ext = os.path.splitext(path)[1]
+
+    file_path = f"./output/video/{keyword}"
+    os.makedirs(file_path, exist_ok=True)
+
+    chunk_size = 10
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, timeout=600) as r:
+            with open(f"{file_path}/{randomName(6)}{ext}", "wb") as f:
+                while True:
+                    chunk = await r.content.read(chunk_size)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+
+
+def downloadImageFromURL(url, keyword="unknown"):
     file_path = f"./output/img/{keyword}"
     os.makedirs(file_path, exist_ok=True)
     urllib.request.urlretrieve(url, f"{file_path}/{randomName(6)}.jpg")
+
+
+def downloadVideoFromURL(url, keyword="unknown"):
+    path = urlparse(url).path
+    ext = os.path.splitext(path)[1]
+
+    file_path = f"./output/video/{keyword}"
+    os.makedirs(file_path, exist_ok=True)
+
+    try:
+        with urllib.request.urlopen(url) as r:
+            with open(f"{file_path}/{randomName(6)}{ext}", "wb") as f:
+                f.write(r.read())
+    except Exception:
+        pass
 
 
 def randomName(n):

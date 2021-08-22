@@ -333,3 +333,8 @@
 君
 俺
 僕
+
+rt
+http
+https
+co
